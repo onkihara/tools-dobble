@@ -20,4 +20,5 @@ storage/app
 storage/framework
 storage/debugbar
 storage/logs
+storage/pail
 database/*.sqlite
