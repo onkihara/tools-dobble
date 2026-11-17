@@ -1,0 +1,97 @@
+name: Deploy to blikk
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: /apps/www/tools/dobble
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install production Composer dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies and build assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Configure SSH
+        run: |
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Create remote directory
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -p "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "mkdir -p '$DEPLOY_PATH'"
+
+      - name: Sync Laravel deployment files
+        run: |
+          rsync -az --checksum --itemize-changes \
+            -e "ssh -i $HOME/.ssh/id_ed25519 -p $DEPLOY_PORT -o StrictHostKeyChecking=yes" \
+            --exclude='/bootstrap/cache/***' \
+            --exclude='/public/storage/***' \
+            --include='/app/***' \
+            --include='/bootstrap/***' \
+            --include='/config/***' \
+            --include='/database/' \
+            --include='/database/migrations/***' \
+            --include='/public/***' \
+            --include='/resources/' \
+            --include='/resources/views/***' \
+            --include='/resources/lang/***' \
+            --include='/routes/***' \
+            --include='/lang/***' \
+            --include='/artisan' \
+            --include='/composer.json' \
+            --include='/composer.lock' \
+            --include='/vendor/***' \
+            --exclude='*' \
+            ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"
