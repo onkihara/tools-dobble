@@ -10,7 +10,6 @@ vendor
 
 .phpunit.result.cache
 .phpunit.result.cache.*
-artisan
 public/css
 public/js
 storage/*.key
