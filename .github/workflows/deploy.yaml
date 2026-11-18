@@ -72,7 +72,6 @@ jobs:
         run: |
           rsync -az --checksum --itemize-changes --omit-dir-times \
             -e "ssh -i $HOME/.ssh/id_ed25519 -p $DEPLOY_PORT -o StrictHostKeyChecking=yes" \
-            --exclude='/bootstrap/cache/***' \
             --exclude='/public/storage/***' \
             --include='/app/***' \
             --include='/bootstrap/***' \
