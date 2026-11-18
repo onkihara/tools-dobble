@@ -113,7 +113,7 @@ jobs:
             -p "$DEPLOY_PORT" \
             -o StrictHostKeyChecking=yes \
             "$SSH_USER@$SSH_HOST" \
-            "sudo /usr/local/sbin/laravel-fix-permissions.sh '$APP_PATH' '$TARGET_UID' '$TARGET_GID'"
+            "sudo -t /usr/local/sbin/laravel-fix-permissions.sh '$APP_PATH' '$TARGET_UID' '$TARGET_GID'"
 
 
       - name: Remove SSH key
