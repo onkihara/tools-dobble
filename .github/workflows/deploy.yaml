@@ -33,6 +33,11 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      - name: Create dirs for composer post-install scripts
+        run: |
+          mkdir bootstrap/cache
+          mkdir -p storage/framework/views
+
       - name: Install production Composer dependencies
         run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
