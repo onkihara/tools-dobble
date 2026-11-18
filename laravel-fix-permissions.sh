@@ -22,12 +22,12 @@ case "$APP_NAME" in
 esac
 
 case "$OWNER_UID" in
-    82|33) ;;
+    82|33|github) ;;
     *) echo "UID is not allowed: $OWNER_UID" >&2; exit 64 ;;
 esac
 
 case "$OWNER_GID" in
-    82|tape) ;;
+    82|tape|github) ;;
     *) echo "GID is not allowed: $OWNER_GID" >&2; exit 64 ;;
 esac
 
@@ -51,10 +51,16 @@ if [ -L "$APP_REAL/storage" ] ||
     exit 1
 fi
 
-#sqlite database
-chown "$OWNER_UID:$OWNER_GID" "$APP_REAL/database/database.sqlite"
+# SQLite-Datenbank
+if [[ -f "$APP_REAL/database/database.sqlite" ]]; then
+    chown "$OWNER_UID:$OWNER_GID" "$APP_REAL/database/database.sqlite"
+fi
 
-# laravel writable directories
-chown -R "$OWNER_UID:$OWNER_GID" "$APP_REAL/storage" "$APP_REAL/bootstrap/cache"
-find "$APP_REAL/storage" "$APP_REAL/bootstrap/cache" -type d -exec chmod 775 {} +
-find "$APP_REAL/storage" "$APP_REAL/bootstrap/cache" -type f -exec chmod 664 {} +
+# Laravel beschreibbare Verzeichnisse
+for dir in "$APP_REAL/storage" "$APP_REAL/bootstrap/cache"; do
+    if [[ -d "$dir" ]]; then
+        chown -R "$OWNER_UID:$OWNER_GID" "$dir"
+        find "$dir" -type d -exec chmod 775 {} +
+        find "$dir" -type f -exec chmod 664 {} +
+    fi
+done
