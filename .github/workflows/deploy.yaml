@@ -22,7 +22,7 @@ jobs:
       TARGET_UID: 82
       TARGET_GID: 82
       DEPLOY_PATH: /apps/www/tools/dobble
-      APP_PATH: /tools/dobble
+      APP_PATH: tools/dobble
       DEPLOY_OPTIMIZE_URL: https://apps.blikk.it/dobble/optimize.php
 
     steps:
