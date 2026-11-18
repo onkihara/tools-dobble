@@ -44,12 +44,6 @@ jobs:
       - name: Install production Composer dependencies
         run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-      # - name: Create view cache directory
-      #   run: mkdir -p storage/framework/views
-
-      # - name: Optimize laravel applicaton
-      #   run: php artisan optimize
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
