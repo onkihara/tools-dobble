@@ -86,6 +86,7 @@ jobs:
             --include='/app/***' \
             --include='/bootstrap/***' \
             --include='/config/***' \
+            --include='/database/' \
             --include='/database/database.sqlite' \
             --include='/database/migrations/***' \
             --include='/public/***' \
