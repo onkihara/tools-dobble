@@ -38,11 +38,11 @@ jobs:
       - name: Optimize laravel applicaton
         run: |
           php artisan config:clear
-          php artisan routes:clear
-          php artisan events:clear
+          php artisan route:clear
+          php artisan event:clear
           php artisan config:cache
-          php artisan routes:cache
-          php artisan events:cache
+          php artisan route:cache
+          php artisan event:cache
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
