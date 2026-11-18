@@ -19,7 +19,10 @@ jobs:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      TARGET_UID: 82
+      TARGET_GID: 82
       DEPLOY_PATH: /apps/www/tools/dobble
+      APP_PATH: /tools/dobble
       DEPLOY_OPTIMIZE_URL: https://apps.blikk.it/dobble/optimize.php
 
     steps:
@@ -71,15 +74,6 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
-      - name: Create remote directory
-        run: |
-          ssh \
-            -i "$HOME/.ssh/id_ed25519" \
-            -p "$DEPLOY_PORT" \
-            -o StrictHostKeyChecking=yes \
-            "$SSH_USER@$SSH_HOST" \
-            "mkdir -p '$DEPLOY_PATH'"
-
       - name: Sync Laravel deployment files
         run: |
           rsync -az --checksum --itemize-changes --omit-dir-times \
@@ -95,6 +89,7 @@ jobs:
             --include='/resources/lang/***' \
             --include='/routes/***' \
             --include='/lang/***' \
+            --include='/storage/***' \
             --include='/artisan' \
             --include='/composer.json' \
             --include='/composer.lock' \
@@ -102,8 +97,30 @@ jobs:
             --exclude='*' \
             ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
 
-      - name: Optimize installation
-        run: wget $DEPLOY_OPTIMIZE_URL
+      - name: Create remote directories not yet deployed
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -p "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "mkdir -p \
+              '$DEPLOY_PATH/storage/app/private' \
+              '$DEPLOY_PATH/storage/app/public' \
+              '$DEPLOY_PATH/storage/framework/cache/data' \
+              '$DEPLOY_PATH/storage/framework/sessions' \
+              '$DEPLOY_PATH/storage/framework/testing' \
+              '$DEPLOY_PATH/storage/logs'"
+
+      - name: Set Laravel writable directory ownership via sudoer-script
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -p "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "sudo /usr/local/sbin/laravel-fix-permissions.sh '$APP_PATH' '$TARGET_UID' '$TARGET_GID'"
+
 
       - name: Remove SSH key
         if: always()
