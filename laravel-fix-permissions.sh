@@ -51,7 +51,7 @@ if [ -L "$APP_REAL/storage" ] ||
     exit 1
 fi
 
-mkdir -p "$APP_REAL/storage" "$APP_REAL/bootstrap/cache"
+#mkdir -p "$APP_REAL/storage" "$APP_REAL/bootstrap/cache"
 chown -R "$OWNER_UID:$OWNER_GID" "$APP_REAL/storage" "$APP_REAL/bootstrap/cache"
 find "$APP_REAL/storage" "$APP_REAL/bootstrap/cache" -type d -exec chmod 775 {} +
 find "$APP_REAL/storage" "$APP_REAL/bootstrap/cache" -type f -exec chmod 664 {} +
