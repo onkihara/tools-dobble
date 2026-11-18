@@ -36,10 +36,11 @@ jobs:
           tools: composer:v2
           coverage: none
 
-      - name: Create dirs for composer post-install scripts
+      - name: Create dirs for composer post-install scripts and sqlite database
         run: |
           mkdir bootstrap/cache
           mkdir -p storage/framework/views
+          touch database/database.sqlite
 
       - name: Install production Composer dependencies
         run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
@@ -68,6 +69,15 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
+      - name: Re-Set Laravel writable directory ownership via sudoer-script
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -p "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "sudo -n /apps/scripts/laravel-fix-permissions.sh '$APP_PATH' '$SSH_USER' '$SSH_USER'"
+
       - name: Sync Laravel deployment files
         run: |
           rsync -az --checksum --itemize-changes --omit-dir-times \
@@ -76,6 +86,7 @@ jobs:
             --include='/app/***' \
             --include='/bootstrap/***' \
             --include='/config/***' \
+            --include='/database/' \
             --include='/database/migrations/***' \
             --include='/public/***' \
             --include='/resources/' \
@@ -114,7 +125,6 @@ jobs:
             -o StrictHostKeyChecking=yes \
             "$SSH_USER@$SSH_HOST" \
             "sudo -n /apps/scripts/laravel-fix-permissions.sh '$APP_PATH' '$TARGET_UID' '$TARGET_GID'"
-
 
       - name: Remove SSH key
         if: always()
