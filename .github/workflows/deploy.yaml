@@ -20,6 +20,7 @@ jobs:
       SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
       DEPLOY_PATH: /apps/www/tools/dobble
+      DEPLOY_OPTIMIZE_URL: https://apps.blikk.it/dobble/optimize.php
 
     steps:
       - name: Checkout
@@ -35,11 +36,11 @@ jobs:
       - name: Install production Composer dependencies
         run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-      - name: Create view cache directory
-        run: mkdir -p storage/framework/views
+      # - name: Create view cache directory
+      #   run: mkdir -p storage/framework/views
 
-      - name: Optimize laravel applicaton
-        run: php artisan optimize
+      # - name: Optimize laravel applicaton
+      #   run: php artisan optimize
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -74,15 +75,6 @@ jobs:
             "$SSH_USER@$SSH_HOST" \
             "mkdir -p '$DEPLOY_PATH'"
 
-      - name: change ownership of remote files to github-user
-        run: |
-          ssh \
-            -i "$HOME/.ssh/id_ed25519" \
-            -p "$DEPLOY_PORT" \
-            -o StrictHostKeyChecking=yes \
-            "$SSH_USER@$SSH_HOST" \
-            "chown -R $SSH_USER:$SSH_USER '$DEPLOY_PATH'"
-
       - name: Sync Laravel deployment files
         run: |
           rsync -az --checksum --itemize-changes --omit-dir-times \
@@ -91,7 +83,6 @@ jobs:
             --include='/app/***' \
             --include='/bootstrap/***' \
             --include='/config/***' \
-            --include='/database/' \
             --include='/database/migrations/***' \
             --include='/public/***' \
             --include='/resources/' \
@@ -105,6 +96,9 @@ jobs:
             --include='/vendor/***' \
             --exclude='*' \
             ./ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+
+      - name: Optimize installation
+        run: wget $DEPLOY_OPTIMIZE_URL
 
       - name: Remove SSH key
         if: always()
