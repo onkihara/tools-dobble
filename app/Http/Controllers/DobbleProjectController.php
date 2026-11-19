@@ -23,6 +23,17 @@ class DobbleProjectController extends Controller
         private CardSymbolArranger $arranger,
     ) {}
 
+    public function updateLocale(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'locale' => ['required', Rule::in(config('dobble.locales'))],
+        ]);
+
+        $request->session()->put('locale', $validated['locale']);
+
+        return to_route('dobble.index');
+    }
+
     public function index(Request $request): View
     {
         return view('dobble.index', $this->editorData($request));
@@ -66,12 +77,15 @@ class DobbleProjectController extends Controller
 
         if ($cardCount > $maximumCards) {
             return back()
-                ->withErrors(['card_count' => "Bei Ordnung {$order} sind höchstens {$maximumCards} Karten möglich."])
+                ->withErrors(['card_count' => __('dobble.errors.card_count', [
+                    'order' => $order,
+                    'maximum' => $maximumCards,
+                ])])
                 ->withInput();
         }
         if ($symbolSizeMin > $symbolSizeMax) {
             return back()
-                ->withErrors(['symbol_size_min' => 'Die minimale Symbolgröße darf nicht größer als die maximale Symbolgröße sein.'])
+                ->withErrors(['symbol_size_min' => __('dobble.errors.symbol_size_order')])
                 ->withInput();
         }
 
@@ -82,7 +96,7 @@ class DobbleProjectController extends Controller
             && (! is_string($savedBackgroundPath) || ! Storage::disk('local')->exists($savedBackgroundPath))
         ) {
             return back()
-                ->withErrors(['background_image' => 'Lade ein Kartenhintergrundbild hoch, bevor du diese Option auswählst.'])
+                ->withErrors(['background_image' => __('dobble.errors.background_required')])
                 ->withInput();
         }
 
@@ -122,7 +136,7 @@ class DobbleProjectController extends Controller
             $this->deleteUpload($previousBackgroundPath);
         }
 
-        return back()->with('status', 'Die Set-Konfiguration wurde aktualisiert.');
+        return back()->with('status', __('dobble.status.configuration_updated'));
     }
 
     public function randomizeCard(Request $request, string $card): JsonResponse
@@ -148,7 +162,7 @@ class DobbleProjectController extends Controller
             );
         } catch (LogicException) {
             return response()->json([
-                'errors' => ['layout' => ['Für diese Karte konnte keine neue sichere Anordnung erstellt werden.']],
+                'errors' => ['layout' => [__('dobble.errors.randomize')]],
             ], 422);
         }
 
@@ -212,7 +226,7 @@ class DobbleProjectController extends Controller
             ]);
         }
 
-        return back()->with('status', 'Das Symbolbild wurde gespeichert.');
+        return back()->with('status', __('dobble.status.symbol_saved'));
     }
 
     public function moveSymbol(Request $request, string $symbol): RedirectResponse
@@ -237,7 +251,7 @@ class DobbleProjectController extends Controller
 
         if (! is_array($sourceSymbol)) {
             return back()->withErrors([
-                'target_symbol' => 'Für dieses Symbol gibt es kein Bild zum Verschieben.',
+                'target_symbol' => __('dobble.errors.move_missing'),
             ]);
         }
 
@@ -251,7 +265,7 @@ class DobbleProjectController extends Controller
         $project['symbols'][$targetKey] = $sourceSymbol;
         $request->session()->put(self::SESSION_KEY, $project);
 
-        return back()->with('status', 'Die Symbolbilder wurden neu zugeordnet.');
+        return back()->with('status', __('dobble.status.symbols_moved'));
     }
 
     public function removeSymbol(Request $request, string $symbol): RedirectResponse|JsonResponse
@@ -330,7 +344,9 @@ class DobbleProjectController extends Controller
 
         if ($data['missingSymbols'] !== []) {
             return back()->withErrors([
-                'export' => 'Für den Druck fehlen noch '.count($data['missingSymbols']).' Symbolbilder.',
+                'export' => __('dobble.errors.print_missing', [
+                    'count' => count($data['missingSymbols']),
+                ]),
             ]);
         }
 
@@ -354,7 +370,7 @@ class DobbleProjectController extends Controller
         );
         $request->session()->forget(self::SESSION_KEY);
 
-        return to_route('dobble.index')->with('status', 'Ein neues Set kann jetzt konfiguriert werden.');
+        return to_route('dobble.index')->with('status', __('dobble.status.reset'));
     }
 
     /**
@@ -438,11 +454,11 @@ class DobbleProjectController extends Controller
                 $height = (int) $savedSymbol['height'];
 
                 if (min($width, $height) < 256) {
-                    $qualityWarnings[] = 'Geringe Auflösung: möglichst mindestens 256 × 256 Pixel verwenden.';
+                    $qualityWarnings[] = __('dobble.quality.low_resolution');
                 }
 
                 if (min($width, $height) > 0 && max($width, $height) / min($width, $height) > 2) {
-                    $qualityWarnings[] = 'Ungewöhnliches Seitenverhältnis: das Bild wird im Kreis mit Rand dargestellt.';
+                    $qualityWarnings[] = __('dobble.quality.aspect_ratio');
                 }
             }
 
@@ -450,7 +466,7 @@ class DobbleProjectController extends Controller
                 'id' => $symbolId,
                 'name' => is_array($savedSymbol) && isset($savedSymbol['name'])
                     ? $savedSymbol['name']
-                    : 'Symbol '.($symbolId + 1),
+                    : __('dobble.client.symbols.card.number', ['number' => $symbolId + 1]),
                 'imageUrl' => $imageUrl,
                 'qualityWarnings' => $qualityWarnings,
             ];
@@ -477,7 +493,7 @@ class DobbleProjectController extends Controller
                     (int) $project['symbol_size_max'],
                 );
             } catch (LogicException) {
-                $layoutError = 'Die Symbole lassen sich mit diesen Größenlimits nicht sicher anordnen. Die Vorschau verwendet ersatzweise die Standardgrößen; passe die Grenzen an, damit der Druck freigegeben wird.';
+                $layoutError = __('dobble.errors.layout');
                 $placements = $this->arranger->arrange($card['symbols'], $seed);
             }
 

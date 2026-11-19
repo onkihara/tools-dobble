@@ -1,21 +1,21 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dobble-Set drucken</title>
+    <title>{{ __('dobble.client.print.title') }}</title>
     @vite(['resources/css/app.css'])
 </head>
 <body class="bg-white text-slate-900">
     <main class="mx-auto max-w-5xl px-5 py-8 print:p-0" style="--print-columns: {{ $columns }}; --card-diameter: {{ $project['radius_mm'] * 2 }}mm">
         <div class="mb-8 flex flex-wrap items-center justify-between gap-4 print:hidden">
             <div>
-                <a href="{{ route('dobble.index') }}" class="text-sm font-semibold text-[#21665e] hover:underline">← Zurück zur Werkstatt</a>
-                <h1 class="mt-3 text-2xl font-semibold">Druckvorschau · {{ count($cards) }} Karten</h1>
-                <p class="mt-1 text-sm text-slate-600">Im Druckdialog „Als PDF speichern“ wählen. Druckformat: A4, Hochformat, Skalierung 100 %.</p>
+                <a href="{{ route('dobble.index') }}" class="text-sm font-semibold text-[#21665e] hover:underline">{{ __('dobble.client.print.back') }}</a>
+                <h1 class="mt-3 text-2xl font-semibold">{{ __('dobble.client.print.preview', ['count' => count($cards)]) }}</h1>
+                <p class="mt-1 text-sm text-slate-600">{{ __('dobble.client.print.instructions') }}</p>
             </div>
             <button type="button" onclick="window.print()" class="rounded-xl bg-[#193a38] px-5 py-3 text-sm font-semibold text-white hover:bg-[#24534f]">
-                Drucken / als PDF speichern
+                {{ __('dobble.client.print.submit') }}
             </button>
         </div>
 

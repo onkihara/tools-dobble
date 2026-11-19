@@ -24,8 +24,13 @@ const props = defineProps({
         type: String,
         required: true,
     },
+    translations: {
+        type: Object,
+        required: true,
+    },
 });
 
+const t = props.translations;
 const symbols = ref(props.symbols);
 const nameDrafts = reactive(Object.fromEntries(
     props.symbols.map((symbol) => [symbol.id, symbol.name]),
@@ -50,6 +55,8 @@ const missingSymbols = computed(() => symbols.value.filter((symbol) => !symbol.i
 const uploadedCount = computed(() => symbols.value.length - missingSymbols.value.length);
 
 const symbolUrl = (template, symbolId) => template.replace('__SYMBOL_ID__', String(symbolId));
+const formatMessage = (message, replacements = {}) => Object.entries(replacements)
+    .reduce((formatted, [key, value]) => formatted.replaceAll(`:${key}`, String(value)), message);
 
 const setStatus = (state, key, message, isError = false) => {
     state[key] = message;
@@ -70,7 +77,7 @@ const updatePrintRequirements = (missingCount) => {
     if (printLink && printRequirements) {
         printLink.hidden = missingCount > 0;
         printRequirements.hidden = missingCount === 0;
-        printRequirements.textContent = `Noch ${missingCount} Bilder erforderlich`;
+        printRequirements.textContent = formatMessage(t.preview.missing, { count: missingCount });
     }
 };
 
@@ -116,12 +123,12 @@ const updateSymbol = (updatedSymbol) => {
         || (updatedSymbol.imageUrl !== null && typeof updatedSymbol.imageUrl !== 'string')
         || !Array.isArray(updatedSymbol.qualityWarnings)
     ) {
-        throw new Error('Die Serverantwort enthält keine gültige Symbolzuordnung.');
+        throw new Error(t.symbols.errors.invalid_symbol);
     }
 
     const symbol = symbols.value.find((item) => item.id === updatedSymbol.id);
     if (!symbol) {
-        throw new Error('Die Symbolkarte für die Serverantwort wurde nicht gefunden.');
+        throw new Error(t.symbols.errors.missing_symbol);
     }
 
     revokePreviewUrl(symbol.id);
@@ -150,7 +157,7 @@ const submitFormAsJson = async (url, formData, loadingMessage, state, statusKey)
 
     if (!response.ok) {
         const errors = Object.values(result.errors ?? {}).flat();
-        throw new Error(errors.join(' ') || 'Die Änderung konnte nicht gespeichert werden. Bitte versuche es erneut.');
+        throw new Error(errors.join(' ') || t.symbols.errors.request_failed);
     }
 
     return result;
@@ -178,7 +185,7 @@ const handleUpload = async (symbol, event) => {
     const input = form.querySelector('[data-image-input]');
 
     if (!(form instanceof HTMLFormElement) || !(input instanceof HTMLInputElement)) {
-        throw new Error('Das Upload-Formular für ein Symbol ist nicht verfügbar.');
+        throw new Error(t.symbols.errors.upload_form);
     }
 
     const formData = new FormData(form);
@@ -188,13 +195,13 @@ const handleUpload = async (symbol, event) => {
         const result = await submitFormAsJson(
             form.action,
             formData,
-            'Bild wird hochgeladen …',
+            t.symbols.status.uploading,
             state,
             'uploadStatus',
         );
         updateSetFromResponse(result);
         input.value = '';
-        setStatus(state, 'uploadStatus', 'Bild gespeichert.');
+        setStatus(state, 'uploadStatus', t.symbols.status.uploaded);
     } catch (error) {
         console.error('Das Symbolbild konnte nicht hochgeladen werden.', error);
         setStatus(
@@ -202,7 +209,7 @@ const handleUpload = async (symbol, event) => {
             'uploadStatus',
             error instanceof Error
                 ? error.message
-                : 'Der Upload ist fehlgeschlagen. Bitte prüfe deine Verbindung und versuche es erneut.',
+                : t.symbols.errors.upload_failed,
             true,
         );
     } finally {
@@ -215,7 +222,7 @@ const handleRemoval = async (symbol, event) => {
     const state = symbolStates[symbol.id];
 
     if (!(form instanceof HTMLFormElement)) {
-        throw new Error('Das Formular zum Entfernen des Bildes ist nicht verfügbar.');
+        throw new Error(t.symbols.errors.remove_form);
     }
 
     state.isRemoving = true;
@@ -224,17 +231,17 @@ const handleRemoval = async (symbol, event) => {
         const result = await submitFormAsJson(
             form.action,
             new FormData(form),
-            'Bild wird entfernt …',
+            t.symbols.status.removing,
             state,
             'removeStatus',
         );
 
         if (!result.symbol || result.symbol.imageUrl !== null) {
-            throw new Error('Die Serverantwort enthält einen ungültigen Symbolzustand.');
+            throw new Error(t.symbols.errors.invalid_removal);
         }
 
         updateSetFromResponse(result);
-        setStatus(state, 'uploadStatus', 'Bild entfernt.');
+        setStatus(state, 'uploadStatus', t.symbols.status.removed);
     } catch (error) {
         console.error('Das Symbolbild konnte nicht entfernt werden.', error);
         setStatus(
@@ -242,7 +249,7 @@ const handleRemoval = async (symbol, event) => {
             'removeStatus',
             error instanceof Error
                 ? error.message
-                : 'Das Bild konnte nicht entfernt werden. Bitte versuche es erneut.',
+                : t.symbols.errors.remove_failed,
             true,
         );
     } finally {
@@ -253,7 +260,7 @@ const handleRemoval = async (symbol, event) => {
 const handleBulkUpload = async (event) => {
     const input = event.currentTarget;
     if (!(input instanceof HTMLInputElement)) {
-        throw new Error('Die Dateiauswahl für den Mehrfachupload ist nicht verfügbar.');
+        throw new Error(t.symbols.errors.bulk_input);
     }
 
     const files = Array.from(input.files ?? []);
@@ -265,7 +272,7 @@ const handleBulkUpload = async (event) => {
         setStatus(
             bulkUploadState,
             'status',
-            `Es sind nur noch ${missingSymbols.value.length} leere Symbole verfügbar. Bitte wähle höchstens so viele Bilder aus.`,
+            formatMessage(t.symbols.bulk.too_many, { count: missingSymbols.value.length }),
             true,
         );
         input.value = '';
@@ -294,7 +301,10 @@ const handleBulkUpload = async (event) => {
             const result = await submitFormAsJson(
                 symbolUrl(props.uploadUrl, symbol.id),
                 formData,
-                `Bild ${index + 1} von ${files.length} wird hochgeladen …`,
+                formatMessage(t.symbols.bulk.uploading, {
+                    current: index + 1,
+                    total: files.length,
+                }),
                 state,
                 'uploadStatus',
             );
@@ -304,24 +314,31 @@ const handleBulkUpload = async (event) => {
             setStatus(
                 bulkUploadState,
                 'status',
-                `${uploadedFiles} von ${files.length} Bildern hochgeladen …`,
+                formatMessage(t.symbols.bulk.progress, {
+                    uploaded: uploadedFiles,
+                    total: files.length,
+                }),
             );
         }
 
         setStatus(
             bulkUploadState,
             'status',
-            `${uploadedFiles} Bilder wurden den Symbolen zugeordnet.`,
+            formatMessage(t.symbols.bulk.complete, { count: uploadedFiles }),
         );
     } catch (error) {
         console.error('Der Bulk-Upload konnte nicht vollständig abgeschlossen werden.', error);
         const detail = error instanceof Error
             ? error.message
-            : 'Bitte prüfe deine Verbindung und versuche es erneut.';
+            : t.symbols.errors.bulk_failed;
         setStatus(
             bulkUploadState,
             'status',
-            `${uploadedFiles} von ${files.length} Bildern wurden hochgeladen. ${detail}`,
+            formatMessage(t.symbols.bulk.partial, {
+                uploaded: uploadedFiles,
+                total: files.length,
+                detail,
+            }),
             true,
         );
     } finally {
@@ -342,15 +359,14 @@ onBeforeUnmount(() => {
     <section id="symbole" class="mt-8 scroll-mt-6 border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <p class="text-sm font-semibold uppercase tracking-wider text-[#e7674e]">Schritt 2</p>
-                <h2 class="mt-1 text-2xl font-semibold tracking-tight">Eigene Symbole zuordnen</h2>
+                <p class="text-sm font-semibold uppercase tracking-wider text-[#e7674e]">{{ t.symbols.step }}</p>
+                    <h2 class="mt-1 text-2xl font-semibold tracking-tight">{{ t.symbols.title }}</h2>
                 <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                    Lade einzelne Bilder oder mehrere PNG-, JPEG- oder WebP-Bilder auf einmal hoch. Bilder bleiben privat und sind nur in deiner Sitzung erreichbar.
-                    Für ein scharfes Druckbild empfehlen sich quadratische Dateien ab 256 × 256 Pixel.
+                        {{ t.symbols.description }}
                 </p>
             </div>
             <p data-symbol-count class="rounded-full bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900">
-                {{ uploadedCount }} von {{ symbols.length }} Bildern vorhanden
+                {{ formatMessage(t.symbols.count, { uploaded: uploadedCount, total: symbols.length }) }}
             </p>
         </div>
 
@@ -358,6 +374,7 @@ onBeforeUnmount(() => {
             :disabled="missingSymbols.length === 0 || isBulkUploading"
             :status="bulkUploadState.status"
             :is-error="bulkUploadState.isError"
+            :translations="t.symbols.bulk"
             @files-selected="handleBulkUpload"
         />
 
@@ -367,6 +384,7 @@ onBeforeUnmount(() => {
                 :key="symbol.id"
                 :symbol="symbol"
                 :symbols="symbols"
+                :translations="t.symbols.card"
                 :state="symbolStates[symbol.id]"
                 v-model:name-draft="nameDrafts[symbol.id]"
                 :upload-url="symbolUrl(props.uploadUrl, symbol.id)"

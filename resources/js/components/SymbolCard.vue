@@ -4,6 +4,10 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    translations: {
+        type: Object,
+        required: true,
+    },
     symbols: {
         type: Array,
         required: true,
@@ -48,6 +52,9 @@ defineEmits([
     'upload-submitted',
     'removal-submitted',
 ]);
+
+const formatMessage = (message, replacements = {}) => Object.entries(replacements)
+    .reduce((formatted, [key, value]) => formatted.replaceAll(`:${key}`, String(value)), message);
 </script>
 
 <template>
@@ -73,7 +80,7 @@ defineEmits([
             </div>
             <div class="min-w-0">
                 <h3 data-symbol-name class="truncate font-semibold">{{ props.symbol.name }}</h3>
-                <p class="mt-1 text-xs text-slate-500">Symbol {{ props.symbol.id + 1 }}</p>
+                <p class="mt-1 text-xs text-slate-500">{{ formatMessage(props.translations.number, { number: props.symbol.id + 1 }) }}</p>
             </div>
             <span
                 data-symbol-status
@@ -81,7 +88,7 @@ defineEmits([
                     'ml-auto rounded-full px-2.5 py-1 text-xs font-medium',
                     props.symbol.imageUrl ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900',
                 ]"
-            >{{ props.symbol.imageUrl ? 'Bereit' : 'Bild fehlt' }}</span>
+            >{{ props.symbol.imageUrl ? props.translations.ready : props.translations.missing }}</span>
         </div>
         <ul
             v-if="props.symbol.qualityWarnings.length > 0"
@@ -102,7 +109,7 @@ defineEmits([
         >
             <input type="hidden" name="_token" :value="props.csrfToken">
             <label class="block text-xs font-medium text-slate-700" :for="`symbol-name-${props.symbol.id}`">
-                Symbolname
+                {{ props.translations.name }}
                 <input
                     :id="`symbol-name-${props.symbol.id}`"
                     :value="props.nameDraft"
@@ -115,7 +122,7 @@ defineEmits([
                 >
             </label>
             <label class="block text-xs font-medium text-slate-700" :for="`symbol-image-${props.symbol.id}`">
-                Bild (PNG, JPEG oder WebP; max. 5 MB)
+                {{ props.translations.image }}
                 <input
                     :id="`symbol-image-${props.symbol.id}`"
                     name="image"
@@ -151,7 +158,7 @@ defineEmits([
                 type="submit"
                 :disabled="props.isBulkUploading || props.state.isRemoving || props.state.isUploading"
                 class="rounded-lg px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-            >Entfernen</button>
+            >{{ props.translations.remove }}</button>
             <p
                 data-remove-status
                 :role="props.state.removeStatusIsError ? 'alert' : 'status'"
@@ -169,7 +176,7 @@ defineEmits([
         >
             <input type="hidden" name="_token" :value="props.csrfToken">
             <label class="block text-xs font-medium text-slate-700" :for="`symbol-target-${props.symbol.id}`">
-                Verschieben oder mit anderem Symbol tauschen
+                {{ props.translations.move }}
                 <select
                     :id="`symbol-target-${props.symbol.id}`"
                     name="target_symbol"
@@ -179,7 +186,12 @@ defineEmits([
                 >
                     <template v-for="target in props.symbols" :key="target.id">
                         <option v-if="target.id !== props.symbol.id" :value="target.id">
-                            Symbol {{ target.id + 1 }}{{ target.imageUrl ? ' (Bild wird getauscht)' : ' (leer)' }}
+                            {{ formatMessage(
+                                target.imageUrl
+                                    ? props.translations.target_filled
+                                    : props.translations.target_empty,
+                                { number: target.id + 1 },
+                            ) }}
                         </option>
                     </template>
                 </select>
@@ -188,7 +200,7 @@ defineEmits([
                 type="submit"
                 :disabled="props.isBulkUploading"
                 class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >Zuordnung ändern</button>
+            >{{ props.translations.move_submit }}</button>
         </form>
     </article>
 </template>

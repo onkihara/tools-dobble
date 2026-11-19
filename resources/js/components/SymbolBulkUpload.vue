@@ -12,6 +12,10 @@ defineProps({
         type: Boolean,
         required: true,
     },
+    translations: {
+        type: Object,
+        required: true,
+    },
 });
 
 defineEmits(['files-selected']);
@@ -20,7 +24,7 @@ defineEmits(['files-selected']);
 <template>
     <div class="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
         <label for="bulk-symbol-images" class="block text-sm font-semibold text-slate-800">
-            Mehrere Bilder auf einmal hochladen
+            {{ translations.title }}
             <input
                 id="bulk-symbol-images"
                 name="images[]"
@@ -34,8 +38,7 @@ defineEmits(['files-selected']);
             >
         </label>
         <p class="mt-2 text-xs leading-5 text-slate-600">
-            PNG, JPEG oder WebP; maximal 5 MB pro Bild. Die Bilder werden in Dateiauswahl-Reihenfolge den noch leeren Symbolen zugeordnet; der Dateiname wird als Symbolname verwendet.
-            Bereits belegte Symbole bleiben unverändert. Du kannst die Zuordnung anschließend unten ändern.
+            {{ translations.description }}
         </p>
         <p
             data-bulk-upload-status

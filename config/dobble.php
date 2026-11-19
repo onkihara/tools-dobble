@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'default_locale' => 'de',
+    'locales' => ['de', 'it', 'en'],
     'symbol_scale' => [
         'minimum' => 10,
         'maximum' => 300,

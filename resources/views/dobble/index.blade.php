@@ -12,7 +12,7 @@
 
     @if ($errors->any())
         <div role="alert" class="mt-6 border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-900">
-            <p class="font-semibold">Bitte prüfe deine Eingaben:</p>
+            <p class="font-semibold">{{ __('dobble.client.errors.check_inputs') }}</p>
             <ul class="mt-2 list-inside list-disc space-y-1">
                 @foreach ($errors->all() as $error)
                 <li>{{ $error }}</li>
@@ -25,7 +25,7 @@
 
     @if ($layoutError)
         <div role="alert" class="mt-8 border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-900">
-            <p class="font-semibold">Kartenlayout überprüfen!</p>
+            <p class="font-semibold">{{ __('dobble.client.errors.layout_heading') }}</p>
             <p class="mt-1">{{ $layoutError }}</p>
         </div>
     @endif

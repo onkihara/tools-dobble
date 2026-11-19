@@ -539,3 +539,65 @@ test('the completed set opens a print-ready deck', function () {
         ->assertSee('print-card-background', false)
         ->assertSee(route('dobble.background'), false);
 });
+
+test('the selected language persists across requests and translates the workshop', function () {
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="de">', false)
+        ->assertSeeText('Dein Dobble-Set beginnt hier.');
+
+    $this->post(route('dobble.locale'), ['locale' => 'it'])
+        ->assertRedirect(route('dobble.index'))
+        ->assertSessionHas('locale', 'it');
+
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="it">', false)
+        ->assertSeeText('Il tuo set Dobble inizia qui.')
+        ->assertSeeText('Configura il set');
+
+    $this->post(route('dobble.locale'), ['locale' => 'en'])
+        ->assertRedirect(route('dobble.index'))
+        ->assertSessionHas('locale', 'en');
+
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="en">', false)
+        ->assertSeeText('Start creating your Dobble set.')
+        ->assertSeeText('Configure set');
+});
+
+test('an unsupported language is rejected without replacing the saved locale', function () {
+    $response = $this->withSession(['locale' => 'en'])
+        ->from(route('dobble.index'))
+        ->post(route('dobble.locale'), ['locale' => 'fr']);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors(['locale' => 'The selected locale is invalid.'])
+        ->assertSessionHas('locale', 'en');
+});
+
+test('an unsupported saved language falls back to German', function () {
+    $this->withSession(['locale' => 'fr'])
+        ->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="de">', false)
+        ->assertSeeText('Dein Dobble-Set beginnt hier.');
+});
+
+test('validation errors use the selected language', function () {
+    $response = $this->withSession(['locale' => 'it'])
+        ->from(route('dobble.index'))
+        ->post(route('dobble.configuration'), [
+            'order' => 5,
+            'card_count' => 1,
+            'radius_mm' => 35,
+            'background_mode' => 'color',
+            'background_color' => '#fffefa',
+        ]);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors([
+            'card_count' => 'Il campo numero di carte deve essere almeno 2.',
+        ]);
+});

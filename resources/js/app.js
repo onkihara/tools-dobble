@@ -1,6 +1,10 @@
 import { createApp } from 'vue';
 import SymbolManager from './components/SymbolManager.vue';
 
+const translations = JSON.parse(document.body.dataset.translations);
+const formatMessage = (message, replacements = {}) => Object.entries(replacements)
+    .reduce((formatted, [key, value]) => formatted.replaceAll(`:${key}`, String(value)), message);
+
 const orderSelect = document.querySelector('[data-order-select]');
 const cardCountInput = document.querySelector('[data-card-count]');
 const orderSummary = document.querySelector('[data-order-summary]');
@@ -10,7 +14,10 @@ if (orderSelect && cardCountInput && orderSummary) {
         const selectedOption = orderSelect.selectedOptions[0];
         const totalCards = selectedOption.dataset.total;
 
-        orderSummary.textContent = `Vollständige Konstruktion: ${totalCards} Karten`;
+        orderSummary.textContent = formatMessage(
+            translations.configuration.full_construction,
+            { count: totalCards },
+        );
         cardCountInput.max = totalCards;
     };
 
@@ -99,10 +106,10 @@ if (backgroundImageInput instanceof HTMLInputElement) {
 
         if (backgroundImageStatus instanceof HTMLElement) {
             backgroundImageStatus.textContent = file
-                ? 'Neues Bild ausgewählt. Übernimm die Konfiguration, um es zu speichern.'
+                ? translations.javascript.background_new
                 : backgroundImageInput.dataset.savedUrl
-                    ? 'Ein Bild ist gespeichert. Ein neues Bild ersetzt es.'
-                    : 'Wähle ein Bild aus. Es wird auf die Kartenfläche zugeschnitten.';
+                    ? translations.javascript.background_saved
+                    : translations.javascript.background_choose;
         }
 
         updateBackgroundFields();
@@ -126,7 +133,7 @@ document.querySelectorAll('[data-card-preview]').forEach((preview) => {
         }
 
         preview.setAttribute('aria-busy', 'true');
-        setUploadStatus(status, 'Symbole werden neu angeordnet …');
+        setUploadStatus(status, translations.preview.randomizing);
 
         try {
             const response = await fetch(preview.dataset.randomizeUrl, {
@@ -141,7 +148,7 @@ document.querySelectorAll('[data-card-preview]').forEach((preview) => {
 
             if (!response.ok) {
                 const errors = Object.values(result.errors ?? {}).flat();
-                throw new Error(errors.join(' ') || 'Die Karte konnte nicht neu angeordnet werden.');
+                throw new Error(errors.join(' ') || translations.preview.randomize_failed);
             }
 
             const symbols = Array.from(preview.querySelectorAll('[data-symbol-image-id]'));
@@ -151,14 +158,14 @@ document.querySelectorAll('[data-card-preview]').forEach((preview) => {
             const updatedSymbols = symbols.map((symbol) => {
                 const placement = placementsBySymbol.get(Number(symbol.dataset.symbolImageId));
                 if (!placement) {
-                    throw new Error('Die Serverantwort enthält keine vollständige Symbolanordnung.');
+                    throw new Error(translations.preview.invalid_layout);
                 }
 
                 return { symbol, placement };
             });
 
             if (updatedSymbols.length !== result.placements.length) {
-                throw new Error('Die Serverantwort enthält eine ungültige Symbolanordnung.');
+                throw new Error(translations.preview.invalid_placements);
             }
 
             updatedSymbols.forEach(({ symbol, placement }) => {
@@ -167,12 +174,12 @@ document.querySelectorAll('[data-card-preview]').forEach((preview) => {
                 symbol.style.setProperty('--symbol-rotation', `${placement.rotation}deg`);
                 symbol.style.setProperty('--symbol-scale', String(placement.scale));
             });
-            setUploadStatus(status, 'Symbole und Größen wurden neu gemischt.');
+            setUploadStatus(status, translations.preview.randomized);
         } catch (error) {
             console.error('Die Karte konnte nicht neu angeordnet werden.', error);
             setUploadStatus(
                 status,
-                error instanceof Error ? error.message : 'Die Karte konnte nicht neu angeordnet werden.',
+                error instanceof Error ? error.message : translations.preview.randomize_failed,
                 true,
             );
         } finally {
@@ -197,5 +204,6 @@ if (symbolManager instanceof HTMLElement) {
         removeUrl: symbolManager.dataset.removeUrl,
         moveUrl: symbolManager.dataset.moveUrl,
         csrfToken: document.querySelector('meta[name="csrf-token"]').content,
+        translations,
     }).mount(symbolManager);
 }
