@@ -7,6 +7,7 @@ vendor
 .vscode
 *.log
 *.tmp
+*.sqlite
 
 .phpunit.result.cache
 .phpunit.result.cache.*
@@ -22,4 +23,3 @@ storage/framework
 storage/debugbar
 storage/logs
 storage/pail
-database/*.sqlite
