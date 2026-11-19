@@ -4,9 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <meta property="og:image" content="https://www.blikk.it/blikk_og_image.png">
+
     <title>{{ __('dobble.client.app_name') }}</title>
+
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    
 </head>
 <body class="min-h-screen bg-[#f7f5ef] text-slate-900 antialiased" data-translations='@json(__('dobble.client'))'>
     <header class="border-b border-slate-200 bg-[#FF9900]">
