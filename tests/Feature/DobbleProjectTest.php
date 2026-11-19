@@ -259,7 +259,22 @@ test('an uploaded symbol image remains private to the session', function () {
         ->assertHeader('Content-Type', 'image/png');
     $this->get(route('dobble.index'))
         ->assertOk()
-        ->assertSeeText('Geringe Auflösung');
+        ->assertSee('Geringe Aufl\u00f6sung', false);
+});
+
+test('symbol names are safely serialized for the Vue component', function () {
+    Storage::fake('local');
+    $this->get(route('dobble.index'));
+
+    $this->post(route('dobble.symbols.upload', ['symbol' => 0]), [
+        'name' => '<script>alert(1)</script>',
+        'image' => UploadedFile::fake()->image('sun.png', 256, 256),
+    ])->assertRedirect(route('dobble.index'));
+
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertDontSee('<script>alert(1)</script>', false)
+        ->assertSee('\u003Cscript\u003Ealert(1)\u003C\/script\u003E', false);
 });
 
 test('a JSON image upload returns the updated symbol data without redirecting', function () {
@@ -393,15 +408,13 @@ test('symbol images upload automatically and can be removed from the editor', fu
     $response = $this->get(route('dobble.index'));
 
     $response->assertOk()
-        ->assertSee('data-image-input', false)
-        ->assertSee('data-image-upload-form', false)
-        ->assertSee('data-bulk-image-input', false)
-        ->assertSee('multiple', false)
-        ->assertSee('data-symbol-move-form', false)
-        ->assertSeeText('Dateiauswahl-Reihenfolge')
-        ->assertSeeText('Entfernen')
-        ->assertDontSeeText('Bild speichern')
-        ->assertDontSeeText('Bild ersetzen');
+        ->assertSee('data-symbol-manager', false)
+        ->assertSee('data-symbols=', false)
+        ->assertSee(route('dobble.symbols.upload', ['symbol' => '__SYMBOL_ID__']), false)
+        ->assertSee(route('dobble.symbols.remove', ['symbol' => '__SYMBOL_ID__']), false)
+        ->assertSee(route('dobble.symbols.move', ['symbol' => '__SYMBOL_ID__']), false)
+        ->assertSee($response->viewData('symbols')[0]['imageUrl'], false)
+        ->assertSeeText('13 Karten');
 });
 
 test('reset deletes the complete session image directory', function () {
@@ -470,7 +483,7 @@ test('a very wide image warns that it may not fit the card well', function () {
 
     $this->get(route('dobble.index'))
         ->assertOk()
-        ->assertSeeText('Ungewöhnliches Seitenverhältnis');
+        ->assertSee('Ungew\u00f6hnliches Seitenverh\u00e4ltnis', false);
 });
 
 test('an invalid image upload is rejected without storing a file', function () {
@@ -525,4 +538,66 @@ test('the completed set opens a print-ready deck', function () {
         ->assertSee('print-card', false)
         ->assertSee('print-card-background', false)
         ->assertSee(route('dobble.background'), false);
+});
+
+test('the selected language persists across requests and translates the workshop', function () {
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="de">', false)
+        ->assertSeeText('Dein Dobble-Set beginnt hier.');
+
+    $this->post(route('dobble.locale'), ['locale' => 'it'])
+        ->assertRedirect(route('dobble.index'))
+        ->assertSessionHas('locale', 'it');
+
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="it">', false)
+        ->assertSeeText('Il tuo set Dobble inizia qui.')
+        ->assertSeeText('Configura il set');
+
+    $this->post(route('dobble.locale'), ['locale' => 'en'])
+        ->assertRedirect(route('dobble.index'))
+        ->assertSessionHas('locale', 'en');
+
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="en">', false)
+        ->assertSeeText('Start creating your Dobble set.')
+        ->assertSeeText('Configure set');
+});
+
+test('an unsupported language is rejected without replacing the saved locale', function () {
+    $response = $this->withSession(['locale' => 'en'])
+        ->from(route('dobble.index'))
+        ->post(route('dobble.locale'), ['locale' => 'fr']);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors(['locale' => 'The selected locale is invalid.'])
+        ->assertSessionHas('locale', 'en');
+});
+
+test('an unsupported saved language falls back to German', function () {
+    $this->withSession(['locale' => 'fr'])
+        ->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('<html lang="de">', false)
+        ->assertSeeText('Dein Dobble-Set beginnt hier.');
+});
+
+test('validation errors use the selected language', function () {
+    $response = $this->withSession(['locale' => 'it'])
+        ->from(route('dobble.index'))
+        ->post(route('dobble.configuration'), [
+            'order' => 5,
+            'card_count' => 1,
+            'radius_mm' => 35,
+            'background_mode' => 'color',
+            'background_color' => '#fffefa',
+        ]);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors([
+            'card_count' => 'Il campo numero di carte deve essere almeno 2.',
+        ]);
 });
