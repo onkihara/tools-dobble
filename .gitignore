@@ -8,6 +8,7 @@ vendor
 *.log
 *.tmp
 *.sqlite
+hot
 
 .phpunit.result.cache
 .phpunit.result.cache.*
