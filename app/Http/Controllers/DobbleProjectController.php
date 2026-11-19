@@ -165,6 +165,45 @@ class DobbleProjectController extends Controller
         return back()->with('status', 'Das Symbolbild wurde gespeichert.');
     }
 
+    public function moveSymbol(Request $request, string $symbol): RedirectResponse
+    {
+        $symbolId = (int) $symbol;
+        $projectData = $this->editorData($request);
+        abort_unless(in_array($symbolId, $projectData['deck']['symbols'], true), 404);
+
+        $validated = $request->validate([
+            'target_symbol' => [
+                'required',
+                'integer',
+                Rule::in(array_diff($projectData['deck']['symbols'], [$symbolId])),
+            ],
+        ]);
+
+        $targetSymbolId = (int) $validated['target_symbol'];
+        $project = $request->session()->get(self::SESSION_KEY, $projectData['project']);
+        $sourceKey = (string) $symbolId;
+        $targetKey = (string) $targetSymbolId;
+        $sourceSymbol = $project['symbols'][$sourceKey] ?? null;
+
+        if (! is_array($sourceSymbol)) {
+            return back()->withErrors([
+                'target_symbol' => 'Für dieses Symbol gibt es kein Bild zum Verschieben.',
+            ]);
+        }
+
+        $targetSymbol = $project['symbols'][$targetKey] ?? null;
+        if (is_array($targetSymbol)) {
+            $project['symbols'][$sourceKey] = $targetSymbol;
+        } else {
+            unset($project['symbols'][$sourceKey]);
+        }
+
+        $project['symbols'][$targetKey] = $sourceSymbol;
+        $request->session()->put(self::SESSION_KEY, $project);
+
+        return back()->with('status', 'Die Symbolbilder wurden neu zugeordnet.');
+    }
+
     public function removeSymbol(Request $request, string $symbol): RedirectResponse|JsonResponse
     {
         $symbolId = (int) $symbol;

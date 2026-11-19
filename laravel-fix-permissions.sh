@@ -44,23 +44,26 @@ case "$APP_NAME_REAL" in
     ""|*/*) echo "Resolved app must be a direct child of tools" >&2; exit 64 ;;
 esac
 
-if [ -L "$APP_REAL/storage" ] ||
-   [ -L "$APP_REAL/bootstrap" ] ||
-   [ -L "$APP_REAL/bootstrap/cache" ]; then
-    echo "Writable paths must not be symlinks" >&2
-    exit 1
-fi
+# if [ -L "$APP_REAL/storage" ] ||
+#    [ -L "$APP_REAL/bootstrap" ] ||
+#    [ -L "$APP_REAL/bootstrap/cache" ]; then
+#     echo "Writable paths must not be symlinks" >&2
+#     exit 1
+# fi
 
-# SQLite-Datenbank
-if [[ -f "$APP_REAL/database/database.sqlite" ]]; then
-    chown "$OWNER_UID:$OWNER_GID" "$APP_REAL/database/database.sqlite"
-fi
+# # SQLite-Datenbank
+# if [[ -f "$APP_REAL/database/database.sqlite" ]]; then
+#     chown "$OWNER_UID:$OWNER_GID" "$APP_REAL/database/database.sqlite"
+# fi
 
-# Laravel beschreibbare Verzeichnisse
-for dir in "$APP_REAL/storage" "$APP_REAL/bootstrap/cache"; do
-    if [[ -d "$dir" ]]; then
-        chown -R "$OWNER_UID:$OWNER_GID" "$dir"
-        find "$dir" -type d -exec chmod 775 {} +
-        find "$dir" -type f -exec chmod 664 {} +
-    fi
-done
+# # Laravel beschreibbare Verzeichnisse
+# for dir in "$APP_REAL/storage" "$APP_REAL/bootstrap/cache"; do
+#     if [[ -d "$dir" ]]; then
+#         chown -R "$OWNER_UID:$OWNER_GID" "$dir"
+#         find "$dir" -type d -exec chmod 775 {} +
+#         find "$dir" -type f -exec chmod 664 {} +
+#     fi
+# done
+
+# simply set all files to specified userid
+chown -R "$OWNER_UID:$OWNER_GID" "$APP_REAL"

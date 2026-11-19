@@ -169,6 +169,10 @@ const updateSymbolCountAndPrintAction = (result) => {
     printLink.hidden = result.missingCount > 0;
     printRequirements.hidden = result.missingCount === 0;
     printRequirements.textContent = `Noch ${result.missingCount} Bilder erforderlich`;
+    if (bulkImageInput instanceof HTMLInputElement) {
+        bulkImageInput.disabled = result.missingCount === 0
+            || bulkImageInput.getAttribute('aria-busy') === 'true';
+    }
 };
 
 const updateCardPreviews = (symbol) => {
@@ -205,6 +209,157 @@ const removeCardPreviews = (symbol) => {
     });
 };
 
+const updateMoveOptions = () => {
+    document.querySelectorAll('[data-symbol-move-form] select').forEach((select) => {
+        Array.from(select.options).forEach((option) => {
+            const targetCard = document.querySelector(
+                `[data-symbol-card][data-symbol-id="${option.value}"]`,
+            );
+            const hasImage = targetCard?.dataset.symbolImagePresent === 'true';
+            option.textContent = `Symbol ${Number(option.value) + 1}${hasImage ? ' (Bild wird getauscht)' : ' (leer)'}`;
+        });
+    });
+};
+
+const updateSymbolCard = (symbol) => {
+    if (!symbol || typeof symbol.imageUrl !== 'string') {
+        throw new Error('Die Serverantwort enthält keine gültige Symbolzuordnung.');
+    }
+
+    const card = document.querySelector(`[data-symbol-card][data-symbol-id="${symbol.id}"]`);
+    if (!card) {
+        throw new Error('Die Symbolkarte für die Serverantwort wurde nicht gefunden.');
+    }
+
+    const preview = card.querySelector('[data-symbol-preview]');
+    if (preview instanceof HTMLImageElement) {
+        if (preview.dataset.previewUrl) {
+            URL.revokeObjectURL(preview.dataset.previewUrl);
+            delete preview.dataset.previewUrl;
+        }
+
+        preview.src = symbol.imageUrl;
+        preview.alt = symbol.name;
+        preview.classList.remove('hidden');
+        card.querySelector('[data-symbol-placeholder]')?.classList.add('hidden');
+    }
+
+    card.querySelector('[data-symbol-name]').textContent = symbol.name;
+    card.querySelector('[name="name"]').value = symbol.name;
+
+    const symbolStatus = card.querySelector('[data-symbol-status]');
+    symbolStatus.textContent = 'Bereit';
+    symbolStatus.classList.remove('bg-amber-50', 'text-amber-900');
+    symbolStatus.classList.add('bg-emerald-50', 'text-emerald-800');
+
+    const warnings = card.querySelector('[data-quality-warnings]');
+    warnings.replaceChildren(...symbol.qualityWarnings.map((warning) => {
+        const item = document.createElement('li');
+        item.textContent = warning;
+
+        return item;
+    }));
+    warnings.classList.toggle('hidden', symbol.qualityWarnings.length === 0);
+
+    card.dataset.symbolImagePresent = 'true';
+    card.querySelector('[data-symbol-remove-form]').hidden = false;
+    card.querySelector('[data-symbol-move-form]').hidden = false;
+    updateCardPreviews(symbol);
+    updateMoveOptions();
+};
+
+const bulkImageInput = document.querySelector('[data-bulk-image-input]');
+const bulkUploadStatus = document.querySelector('[data-bulk-upload-status]');
+
+if (bulkImageInput instanceof HTMLInputElement && bulkUploadStatus instanceof HTMLElement) {
+    bulkImageInput.addEventListener('change', async () => {
+        const files = Array.from(bulkImageInput.files ?? []);
+        if (files.length === 0) {
+            return;
+        }
+
+        const missingCards = Array.from(
+            document.querySelectorAll('[data-symbol-card][data-symbol-image-present="false"]'),
+        );
+        if (files.length > missingCards.length) {
+            setUploadStatus(
+                bulkUploadStatus,
+                `Es sind nur noch ${missingCards.length} leere Symbole verfügbar. Bitte wähle höchstens so viele Bilder aus.`,
+                true,
+            );
+            bulkImageInput.value = '';
+
+            return;
+        }
+
+        const controls = missingCards.flatMap((card) => Array.from(card.querySelectorAll('input, button, select')));
+        const previousDisabledStates = controls.map((control) => control.disabled);
+        controls.forEach((control) => {
+            control.disabled = true;
+        });
+        bulkImageInput.disabled = true;
+        bulkImageInput.setAttribute('aria-busy', 'true');
+        let uploadedCount = 0;
+
+        try {
+            for (const [index, file] of files.entries()) {
+                const card = missingCards[index];
+                const form = card.querySelector('[data-image-upload-form]');
+                const status = form?.querySelector('[data-upload-status]');
+                const csrfToken = form?.querySelector('input[name="_token"]');
+
+                if (!(form instanceof HTMLFormElement) || !(status instanceof HTMLElement) || !(csrfToken instanceof HTMLInputElement)) {
+                    throw new Error('Das Upload-Formular für ein Symbol ist nicht verfügbar.');
+                }
+
+                const extensionIndex = file.name.lastIndexOf('.');
+                const fileName = (extensionIndex > 0 ? file.name.slice(0, extensionIndex) : file.name)
+                    .trim()
+                    .slice(0, 80);
+                const formData = new FormData();
+                formData.append('_token', csrfToken.value);
+                formData.append('name', fileName || card.querySelector('[data-symbol-name]').textContent.trim());
+                formData.append('image', file, file.name);
+
+                const result = await submitFormAsJson(
+                    form,
+                    status,
+                    `Bild ${index + 1} von ${files.length} wird hochgeladen …`,
+                    formData,
+                );
+
+                if (!result) {
+                    throw new Error(status.textContent || 'Bitte prüfe die Dateiformate und versuche es erneut.');
+                }
+
+                updateSymbolCard(result.symbol);
+                updateSymbolCountAndPrintAction(result);
+                uploadedCount++;
+                setUploadStatus(bulkUploadStatus, `${uploadedCount} von ${files.length} Bildern hochgeladen …`);
+            }
+
+            setUploadStatus(bulkUploadStatus, `${uploadedCount} Bilder wurden den Symbolen zugeordnet.`);
+        } catch (error) {
+            console.error('Der Bulk-Upload konnte nicht vollständig abgeschlossen werden.', error);
+            const detail = error instanceof Error ? error.message : 'Bitte prüfe deine Verbindung und versuche es erneut.';
+            setUploadStatus(
+                bulkUploadStatus,
+                `${uploadedCount} von ${files.length} Bildern wurden hochgeladen. ${detail}`,
+                true,
+            );
+        } finally {
+            controls.forEach((control, index) => {
+                control.disabled = previousDisabledStates[index];
+            });
+            bulkImageInput.disabled = document.querySelectorAll(
+                '[data-symbol-card][data-symbol-image-present="false"]',
+            ).length === 0;
+            bulkImageInput.removeAttribute('aria-busy');
+            bulkImageInput.value = '';
+        }
+    });
+}
+
 document.querySelectorAll('[data-image-upload-form]').forEach((form) => {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -232,40 +387,8 @@ document.querySelectorAll('[data-image-upload-form]').forEach((form) => {
             }
 
             const { symbol } = result;
-            if (!symbol || typeof symbol.imageUrl !== 'string') {
-                throw new Error('Die Serverantwort enthält keine Bildadresse.');
-            }
-
-            const preview = card.querySelector('[data-symbol-preview]');
-            if (preview instanceof HTMLImageElement) {
-                if (preview.dataset.previewUrl) {
-                    URL.revokeObjectURL(preview.dataset.previewUrl);
-                    delete preview.dataset.previewUrl;
-                }
-
-                preview.src = symbol.imageUrl;
-                preview.alt = symbol.name;
-                preview.classList.remove('hidden');
-                card.querySelector('[data-symbol-placeholder]')?.classList.add('hidden');
-            }
-
-            card.querySelector('[data-symbol-name]').textContent = symbol.name;
-            card.querySelector('[data-symbol-status]').textContent = 'Bereit';
-            card.querySelector('[data-symbol-status]').classList.remove('bg-amber-50', 'text-amber-900');
-            card.querySelector('[data-symbol-status]').classList.add('bg-emerald-50', 'text-emerald-800');
-
-            const warnings = card.querySelector('[data-quality-warnings]');
-            warnings.replaceChildren(...symbol.qualityWarnings.map((warning) => {
-                const item = document.createElement('li');
-                item.textContent = warning;
-
-                return item;
-            }));
-            warnings.classList.toggle('hidden', symbol.qualityWarnings.length === 0);
-
-            updateCardPreviews(symbol);
+            updateSymbolCard(symbol);
             updateSymbolCountAndPrintAction(result);
-            card.querySelector('[data-symbol-remove-form]').hidden = false;
 
             input.value = '';
             setUploadStatus(status, 'Bild gespeichert.');
@@ -332,6 +455,8 @@ document.querySelectorAll('[data-symbol-remove-form]').forEach((form) => {
             symbolStatus.textContent = 'Bild fehlt';
             symbolStatus.classList.remove('bg-emerald-50', 'text-emerald-800');
             symbolStatus.classList.add('bg-amber-50', 'text-amber-900');
+            card.dataset.symbolImagePresent = 'false';
+            updateMoveOptions();
 
             const warnings = card.querySelector('[data-quality-warnings]');
             warnings.replaceChildren();
@@ -340,6 +465,7 @@ document.querySelectorAll('[data-symbol-remove-form]').forEach((form) => {
             removeCardPreviews(symbol);
             updateSymbolCountAndPrintAction(result);
             form.hidden = true;
+            card.querySelector('[data-symbol-move-form]').hidden = true;
             setUploadStatus(card.querySelector('[data-upload-status]'), 'Bild entfernt.');
         } catch (error) {
             console.error('Das Symbolbild konnte nicht entfernt werden.', error);

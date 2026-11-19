@@ -12,6 +12,7 @@ vendor
 .phpunit.result.cache.*
 public/css
 public/js
+public/build
 bootstrap/cache
 storage/*.key
 storage/*.cache

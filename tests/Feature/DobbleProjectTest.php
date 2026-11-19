@@ -147,6 +147,86 @@ test('a JSON image upload returns the updated symbol data without redirecting', 
     expect(Storage::disk('local')->allFiles('dobble'))->toHaveCount(1);
 });
 
+test('a symbol image can be moved to an empty symbol', function () {
+    Storage::fake('local');
+    $this->get(route('dobble.index'));
+    $this->post(route('dobble.symbols.upload', ['symbol' => 0]), [
+        'name' => 'Sonne',
+        'image' => UploadedFile::fake()->image('sun.png', 256, 256),
+    ])->assertRedirect(route('dobble.index'));
+    $imagePath = session('dobble_project.symbols.0.path');
+
+    $response = $this->from(route('dobble.index'))->post(route('dobble.symbols.move', ['symbol' => 0]), [
+        'target_symbol' => 1,
+    ]);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHas('dobble_project.symbols.1.name', 'Sonne')
+        ->assertSessionHas('dobble_project.symbols.1.path', $imagePath);
+    expect(session('dobble_project.symbols.0'))->toBeNull();
+    expect(Storage::disk('local')->allFiles('dobble'))->toHaveCount(1);
+    $this->get(route('dobble.symbols.show', ['symbol' => 1]))->assertOk();
+});
+
+test('moving an image onto an assigned symbol swaps their images and names', function () {
+    Storage::fake('local');
+    $this->get(route('dobble.index'));
+    $this->post(route('dobble.symbols.upload', ['symbol' => 0]), [
+        'name' => 'Sonne',
+        'image' => UploadedFile::fake()->image('sun.png', 256, 256),
+    ])->assertRedirect(route('dobble.index'));
+    $this->post(route('dobble.symbols.upload', ['symbol' => 1]), [
+        'name' => 'Mond',
+        'image' => UploadedFile::fake()->image('moon.png', 256, 256),
+    ])->assertRedirect(route('dobble.index'));
+    $firstImagePath = session('dobble_project.symbols.0.path');
+    $secondImagePath = session('dobble_project.symbols.1.path');
+
+    $response = $this->from(route('dobble.index'))->post(route('dobble.symbols.move', ['symbol' => 0]), [
+        'target_symbol' => 1,
+    ]);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHas('dobble_project.symbols.0.name', 'Mond')
+        ->assertSessionHas('dobble_project.symbols.1.name', 'Sonne');
+    expect(session('dobble_project.symbols.0.path'))->toBe($secondImagePath);
+    expect(session('dobble_project.symbols.1.path'))->toBe($firstImagePath);
+    expect(Storage::disk('local')->allFiles('dobble'))->toHaveCount(2);
+});
+
+test('a symbol image cannot be moved to the same symbol', function () {
+    Storage::fake('local');
+    $this->get(route('dobble.index'));
+    $this->post(route('dobble.symbols.upload', ['symbol' => 0]), [
+        'name' => 'Sonne',
+        'image' => UploadedFile::fake()->image('sun.png', 256, 256),
+    ])->assertRedirect(route('dobble.index'));
+    $imagePath = session('dobble_project.symbols.0.path');
+
+    $response = $this->from(route('dobble.index'))->post(route('dobble.symbols.move', ['symbol' => 0]), [
+        'target_symbol' => 0,
+    ]);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors('target_symbol')
+        ->assertSessionHas('dobble_project.symbols.0.path', $imagePath);
+    expect(Storage::disk('local')->allFiles('dobble'))->toHaveCount(1);
+});
+
+test('a symbol without an image cannot be moved', function () {
+    Storage::fake('local');
+    $this->get(route('dobble.index'));
+
+    $response = $this->from(route('dobble.index'))->post(route('dobble.symbols.move', ['symbol' => 0]), [
+        'target_symbol' => 1,
+    ]);
+
+    $response->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors('target_symbol');
+    expect(session('dobble_project.symbols'))->toBe([]);
+    expect(Storage::disk('local')->allFiles('dobble'))->toBe([]);
+});
+
 test('a JSON image removal returns the updated set and deletes the stored image', function () {
     Storage::fake('local');
     $this->get(route('dobble.index'));
@@ -180,6 +260,10 @@ test('symbol images upload automatically and can be removed from the editor', fu
     $response->assertOk()
         ->assertSee('data-image-input', false)
         ->assertSee('data-image-upload-form', false)
+        ->assertSee('data-bulk-image-input', false)
+        ->assertSee('multiple', false)
+        ->assertSee('data-symbol-move-form', false)
+        ->assertSeeText('Dateiauswahl-Reihenfolge')
         ->assertSeeText('Entfernen')
         ->assertDontSeeText('Bild speichern')
         ->assertDontSeeText('Bild ersetzen');
