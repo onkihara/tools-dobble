@@ -135,7 +135,7 @@ jobs:
             "sudo -n /apps/scripts/laravel-fix-permissions.sh '$APP_PATH' '$TARGET_UID' '$TARGET_GID'"
 
       - name: Optimize installation
-        run: wget "$DEPLOY_OPTIMIZE_URL/optimize.php"
+        run: wget "$DEPLOY_OPTIMIZE_URL"
 
       - name: Remove SSH key
         if: always()
