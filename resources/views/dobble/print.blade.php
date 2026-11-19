@@ -33,7 +33,7 @@
                                         src="{{ $symbol['imageUrl'] }}"
                                         alt="{{ $symbol['name'] }}"
                                         class="print-card-symbol"
-                                        style="--symbol-left: {{ $symbol['placement']['left'] }}%; --symbol-top: {{ $symbol['placement']['top'] }}%; --symbol-size: {{ $symbol['placement']['size'] }}%; --symbol-rotation: {{ $symbol['placement']['rotation'] }}deg"
+                                        style="--symbol-left: {{ $symbol['placement']['left'] }}%; --symbol-top: {{ $symbol['placement']['top'] }}%; --symbol-size: {{ $symbol['placement']['size'] }}%; --symbol-rotation: {{ $symbol['placement']['rotation'] }}deg; --symbol-scale: {{ $symbol['placement']['scale'] }}"
                                     >
                                 @endforeach
                                 <span class="print-card-number">{{ $card['id'] }}</span>

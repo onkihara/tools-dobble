@@ -108,30 +108,83 @@ if (backgroundImageInput instanceof HTMLInputElement) {
 backgroundColorInput?.addEventListener('input', updateCardBackgroundPreviews);
 updateBackgroundFields();
 
-const randomizePreviewImageSizes = (preview) => {
-    preview.querySelectorAll('.dobble-preview-symbol').forEach((symbol) => {
-        const scalePercentage = Math.round(60 + Math.random() * 100);
-        symbol.style.setProperty('--preview-image-scale', String(scalePercentage / 100));
-    });
-};
-
-document.querySelectorAll('[data-card-preview]').forEach((preview) => {
-    randomizePreviewImageSizes(preview);
-    preview.addEventListener('click', () => randomizePreviewImageSizes(preview));
-    preview.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            randomizePreviewImageSizes(preview);
-        }
-    });
-});
-
 const setUploadStatus = (status, message, isError = false) => {
     status.textContent = message;
     status.setAttribute('role', isError ? 'alert' : 'status');
     status.classList.toggle('text-rose-700', isError);
     status.classList.toggle('text-slate-600', !isError);
 };
+
+document.querySelectorAll('[data-card-preview]').forEach((preview) => {
+    const randomizeCard = async () => {
+        const status = preview.parentElement?.querySelector('[data-card-layout-status]');
+        if (!(status instanceof HTMLElement) || preview.getAttribute('aria-busy') === 'true') {
+            return;
+        }
+
+        preview.setAttribute('aria-busy', 'true');
+        setUploadStatus(status, 'Symbole werden neu angeordnet …');
+
+        try {
+            const response = await fetch(preview.dataset.randomizeUrl, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                },
+            });
+            const result = await response.json();
+
+            if (!response.ok) {
+                const errors = Object.values(result.errors ?? {}).flat();
+                throw new Error(errors.join(' ') || 'Die Karte konnte nicht neu angeordnet werden.');
+            }
+
+            const symbols = Array.from(preview.querySelectorAll('[data-symbol-image-id]'));
+            const placementsBySymbol = new Map(
+                result.placements.map((placement) => [placement.symbol_id, placement]),
+            );
+            const updatedSymbols = symbols.map((symbol) => {
+                const placement = placementsBySymbol.get(Number(symbol.dataset.symbolImageId));
+                if (!placement) {
+                    throw new Error('Die Serverantwort enthält keine vollständige Symbolanordnung.');
+                }
+
+                return { symbol, placement };
+            });
+
+            if (updatedSymbols.length !== result.placements.length) {
+                throw new Error('Die Serverantwort enthält eine ungültige Symbolanordnung.');
+            }
+
+            updatedSymbols.forEach(({ symbol, placement }) => {
+                symbol.style.setProperty('--symbol-left', `${placement.left}%`);
+                symbol.style.setProperty('--symbol-top', `${placement.top}%`);
+                symbol.style.setProperty('--symbol-rotation', `${placement.rotation}deg`);
+                symbol.style.setProperty('--symbol-scale', String(placement.scale));
+            });
+            setUploadStatus(status, 'Symbole und Größen wurden neu gemischt.');
+        } catch (error) {
+            console.error('Die Karte konnte nicht neu angeordnet werden.', error);
+            setUploadStatus(
+                status,
+                error instanceof Error ? error.message : 'Die Karte konnte nicht neu angeordnet werden.',
+                true,
+            );
+        } finally {
+            preview.removeAttribute('aria-busy');
+        }
+    };
+
+    preview.addEventListener('click', randomizeCard);
+    preview.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            randomizeCard();
+        }
+    });
+});
 
 const submitFormAsJson = async (form, status, loadingMessage, formData = new FormData(form)) => {
     setUploadStatus(status, loadingMessage);

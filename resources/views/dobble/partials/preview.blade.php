@@ -6,6 +6,7 @@
             <p class="mt-2 text-sm leading-6 text-slate-600">
                 {{ $project['card_count'] }} Karten · {{ $deck['symbols_per_card'] }} Symbole je Karte · {{ count($symbols) }} verwendete Symbole
             </p>
+            <p class="mt-1 text-sm text-slate-600">Klicke auf eine Karte, um Symbole und Größen neu zu mischen.</p>
         </div>
         <a href="{{ route('dobble.print') }}" data-print-link @if ($missingSymbols !== []) hidden @endif class="inline-flex items-center rounded-xl bg-[#f06a4f] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#dc5b42] focus:outline-none focus:ring-2 focus:ring-[#f06a4f] focus:ring-offset-2">
             Druckansicht / PDF öffnen
@@ -22,8 +23,9 @@
                     class="dobble-card-preview mx-auto cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e7674f] focus-visible:ring-offset-2"
                     role="button"
                     tabindex="0"
-                    aria-label="Karte {{ $card['id'] }}: Symbolgrößen zufällig ändern"
+                    aria-label="Karte {{ $card['id'] }}: Symbole neu anordnen"
                     data-card-preview
+                    data-randomize-url="{{ route('dobble.cards.randomize', ['card' => $card['id']]) }}"
                     style="background-color: {{ $cardBackground['color'] }}"
                 >
                     <img
@@ -43,19 +45,20 @@
                                 title="{{ $cardSymbol['name'] }}"
                                 loading="lazy"
                                 class="dobble-preview-symbol"
-                                style="--symbol-left: {{ $cardSymbol['placement']['left'] }}%; --symbol-top: {{ $cardSymbol['placement']['top'] }}%; --symbol-size: {{ $cardSymbol['placement']['size'] }}%; --symbol-rotation: {{ $cardSymbol['placement']['rotation'] }}deg"
+                                style="--symbol-left: {{ $cardSymbol['placement']['left'] }}%; --symbol-top: {{ $cardSymbol['placement']['top'] }}%; --symbol-size: {{ $cardSymbol['placement']['size'] }}%; --symbol-rotation: {{ $cardSymbol['placement']['rotation'] }}deg; --symbol-scale: {{ $cardSymbol['placement']['scale'] }}"
                             >
                         @else
                             <span
                                 class="dobble-preview-symbol dobble-preview-placeholder"
                                 data-symbol-image-id="{{ $cardSymbol['id'] }}"
                                 title="{{ $cardSymbol['name'] }}"
-                                style="--symbol-left: {{ $cardSymbol['placement']['left'] }}%; --symbol-top: {{ $cardSymbol['placement']['top'] }}%; --symbol-size: {{ $cardSymbol['placement']['size'] }}%; --symbol-rotation: {{ $cardSymbol['placement']['rotation'] }}deg"
+                                style="--symbol-left: {{ $cardSymbol['placement']['left'] }}%; --symbol-top: {{ $cardSymbol['placement']['top'] }}%; --symbol-size: {{ $cardSymbol['placement']['size'] }}%; --symbol-rotation: {{ $cardSymbol['placement']['rotation'] }}deg; --symbol-scale: {{ $cardSymbol['placement']['scale'] }}"
                             >{{ $cardSymbol['id'] + 1 }}</span>
                         @endif
                     @endforeach
                 </div>
                 <p class="mt-3 text-center text-sm font-semibold text-slate-700">Karte {{ $card['id'] }}</p>
+                <p data-card-layout-status role="status" class="mt-1 text-center text-xs text-slate-500" aria-live="polite"></p>
             </article>
         @endforeach
     </div>

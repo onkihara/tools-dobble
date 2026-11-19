@@ -47,6 +47,30 @@
             <span class="mt-1 block text-xs font-normal text-slate-500">Radius 25–60 mm; Schnittkreis-Durchmesser ist doppelt so groß.</span>
         </label>
 
+        <fieldset class="grid gap-4 md:col-span-3 sm:grid-cols-2">
+            <legend class="mb-3 text-sm font-semibold text-slate-800">Größen der Kartensymbole</legend>
+            <label class="block text-sm font-medium text-slate-800" for="symbol_size_min">
+                Untere Grenze
+                <span class="mt-2 flex items-center gap-3">
+                    <input id="symbol_size_min" name="symbol_size_min" type="number" min="{{ config('dobble.symbol_scale.minimum') }}" max="{{ config('dobble.symbol_scale.maximum') }}" required value="{{ old('symbol_size_min', $project['symbol_size_min']) }}"
+                        class="block w-full rounded-xl border border-slate-300 px-3 py-3 text-base shadow-sm focus:border-[#287c72] focus:outline-none focus:ring-2 focus:ring-[#287c72]/20">
+                    <span class="shrink-0 text-sm font-normal text-slate-500">%</span>
+                </span>
+            </label>
+            <label class="block text-sm font-medium text-slate-800" for="symbol_size_max">
+                Obere Grenze
+                <span class="mt-2 flex items-center gap-3">
+                    <input id="symbol_size_max" name="symbol_size_max" type="number" min="{{ config('dobble.symbol_scale.minimum') }}" max="{{ config('dobble.symbol_scale.maximum') }}" required value="{{ old('symbol_size_max', $project['symbol_size_max']) }}"
+                        class="block w-full rounded-xl border border-slate-300 px-3 py-3 text-base shadow-sm focus:border-[#287c72] focus:outline-none focus:ring-2 focus:ring-[#287c72]/20">
+                    <span class="shrink-0 text-sm font-normal text-slate-500">%</span>
+                </span>
+            </label>
+            <p class="text-xs font-normal text-slate-500 sm:col-span-2">
+                Zulässiger Bereich: {{ config('dobble.symbol_scale.minimum') }}–{{ config('dobble.symbol_scale.maximum') }} %.
+                Standard: {{ config('dobble.symbol_scale.default_minimum') }} % bis {{ config('dobble.symbol_scale.default_maximum') }} %.
+            </p>
+        </fieldset>
+
         <fieldset class="space-y-3 md:col-span-3">
             <legend class="text-sm font-semibold text-slate-800">Hintergrund der Karten</legend>
             <div class="grid gap-4 sm:grid-cols-2">

@@ -10,6 +10,7 @@ test('the workshop shows the initial set configuration', function () {
         ->assertSeeText('Dein Dobble-Set beginnt hier.')
         ->assertSeeText('13 Karten')
         ->assertSeeText('Symbole pro Karte')
+        ->assertSeeText('Untere Grenze')
         ->assertSessionHas('dobble_project.layout_seed')
         ->assertSee('--symbol-left:', false)
         ->assertSee('--symbol-rotation:', false);
@@ -32,6 +33,140 @@ test('configuration rejects more cards than the selected construction allows', f
             'card_count' => 'Bei Ordnung 5 sind höchstens 31 Karten möglich.',
         ]);
     $this->assertSame([], Storage::disk('local')->allFiles('dobble'));
+});
+
+test('symbol size limits can be configured within the supported range', function () {
+    $this->get(route('dobble.index'));
+
+    $this->from(route('dobble.index'))->post(route('dobble.configuration'), [
+        'order' => 3,
+        'card_count' => 13,
+        'radius_mm' => 35,
+        'symbol_size_min' => 80,
+        'symbol_size_max' => 140,
+        'background_mode' => 'color',
+        'background_color' => '#fffefa',
+    ])->assertRedirect(route('dobble.index'));
+
+    expect(session('dobble_project.symbol_size_min'))->toBe(80)
+        ->and(session('dobble_project.symbol_size_max'))->toBe(140);
+});
+
+test('the minimum symbol size cannot exceed the maximum symbol size', function () {
+    $this->get(route('dobble.index'));
+
+    $this->from(route('dobble.index'))->post(route('dobble.configuration'), [
+        'order' => 3,
+        'card_count' => 13,
+        'radius_mm' => 35,
+        'symbol_size_min' => 150,
+        'symbol_size_max' => 100,
+        'background_mode' => 'color',
+        'background_color' => '#fffefa',
+    ])->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors('symbol_size_min');
+
+    expect(session('dobble_project.symbol_size_min'))->toBe(60)
+        ->and(session('dobble_project.symbol_size_max'))->toBe(160);
+});
+
+test('symbol scaling limits and defaults come from the Dobble configuration', function () {
+    config([
+        'dobble.symbol_scale.minimum' => 45,
+        'dobble.symbol_scale.maximum' => 185,
+        'dobble.symbol_scale.default_minimum' => 75,
+        'dobble.symbol_scale.default_maximum' => 110,
+    ]);
+
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertSee('min="45" max="185" required value="75"', false)
+        ->assertSee('min="45" max="185" required value="110"', false);
+
+    expect(session('dobble_project.symbol_size_min'))->toBe(75)
+        ->and(session('dobble_project.symbol_size_max'))->toBe(110);
+
+    $this->post(route('dobble.configuration'), [
+        'order' => 3,
+        'card_count' => 13,
+        'radius_mm' => 35,
+        'symbol_size_min' => 44,
+        'symbol_size_max' => 186,
+        'background_mode' => 'color',
+        'background_color' => '#fffefa',
+    ])->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors(['symbol_size_min', 'symbol_size_max']);
+});
+
+test('maximum symbol sizes are shown in the card preview', function () {
+    $this->get(route('dobble.index'));
+
+    $this->post(route('dobble.configuration'), [
+        'order' => 3,
+        'card_count' => 13,
+        'radius_mm' => 35,
+        'symbol_size_min' => 200,
+        'symbol_size_max' => 200,
+        'background_mode' => 'color',
+        'background_color' => '#fffefa',
+    ])->assertRedirect(route('dobble.index'));
+
+    $this->get(route('dobble.index'))
+        ->assertOk()
+        ->assertDontSeeText('Kartenlayout überprüfen!')
+        ->assertSeeText('Karte 1')
+        ->assertSeeText('Karte 13')
+        ->assertSee('id="vorschau"', false)
+        ->assertSee('--symbol-scale: 2', false);
+
+    $this->get(route('dobble.print'))
+        ->assertRedirect(route('dobble.index'))
+        ->assertSessionHasErrors('export');
+});
+
+test('a card can be randomized again using the configured symbol size limits', function () {
+    $this->get(route('dobble.index'));
+    $this->post(route('dobble.configuration'), [
+        'order' => 3,
+        'card_count' => 13,
+        'radius_mm' => 35,
+        'symbol_size_min' => 80,
+        'symbol_size_max' => 100,
+        'background_mode' => 'color',
+        'background_color' => '#fffefa',
+    ])->assertRedirect(route('dobble.index'));
+
+    $page = $this->get(route('dobble.index'));
+    $initialPlacements = array_column(
+        $page->viewData('cards')[0]['symbols'],
+        'placement',
+        'id',
+    );
+    $response = $this->postJson(route('dobble.cards.randomize', ['card' => 1]));
+
+    $response->assertOk()->assertJsonCount(4, 'placements');
+    $placements = $response->json('placements');
+    $placementsBySymbol = array_column($placements, null, 'symbol_id');
+    expect($placementsBySymbol)->not->toEqual($initialPlacements);
+
+    foreach ($placements as $placement) {
+        expect($placement['scale'])->toBeGreaterThanOrEqual(0.8)
+            ->toBeLessThanOrEqual(1.0);
+    }
+
+    $movedSymbols = array_filter($placements, function (array $placement) use ($initialPlacements): bool {
+        $initialPlacement = $initialPlacements[$placement['symbol_id']];
+
+        return $placement['left'] !== $initialPlacement['left']
+            || $placement['top'] !== $initialPlacement['top'];
+    });
+    expect($movedSymbols)->not->toBeEmpty();
+
+    $resizedSymbols = array_filter(
+        $placements,
+        fn (array $placement): bool => $placement['scale'] !== $initialPlacements[$placement['symbol_id']]['scale'],
+    );
+    expect($resizedSymbols)->not->toBeEmpty();
 });
 
 test('the card background can be configured as a color', function () {

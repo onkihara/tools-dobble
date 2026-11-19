@@ -2,36 +2,46 @@
 
 use App\Services\CardSymbolArranger;
 use InvalidArgumentException;
+use Tests\TestCase;
 
-test('randomized symbol placements stay inside the card with a gap between every pair', function (int $symbolCount) {
+uses(TestCase::class);
+
+test('symbol placements may overlap and extend beyond the card circle', function (int $symbolCount) {
     $arranger = new CardSymbolArranger;
-    $placements = $arranger->arrange(range(0, $symbolCount - 1), 3842);
+    $placements = $arranger->arrange(range(0, $symbolCount - 1), 3842, 200, 200);
 
     expect($placements)->toHaveCount($symbolCount);
 
+    $extendsBeyondCircle = false;
     foreach ($placements as $placement) {
         $x = ($placement['left'] - 50) / 50;
         $y = ($placement['top'] - 50) / 50;
-        $size = $placement['size'] / 50;
+        $halfDiagonal = (($placement['size'] / 50) * $placement['scale']) / sqrt(2);
 
-        expect(hypot($x, $y) + ($size / sqrt(2)))->toBeLessThanOrEqual(0.86);
+        if (hypot($x, $y) + $halfDiagonal > 1) {
+            $extendsBeyondCircle = true;
+        }
     }
 
+    $symbolsOverlap = false;
     foreach ($placements as $firstIndex => $firstPlacement) {
         $firstX = ($firstPlacement['left'] - 50) / 50;
         $firstY = ($firstPlacement['top'] - 50) / 50;
-        $firstSize = $firstPlacement['size'] / 50;
+        $firstHalfDiagonal = (($firstPlacement['size'] / 50) * $firstPlacement['scale']) / sqrt(2);
 
         foreach (array_slice($placements, $firstIndex + 1) as $secondPlacement) {
             $secondX = ($secondPlacement['left'] - 50) / 50;
             $secondY = ($secondPlacement['top'] - 50) / 50;
-            $secondSize = $secondPlacement['size'] / 50;
-            $minimumDistance = ($firstSize / sqrt(2)) + ($secondSize / sqrt(2)) + 0.04;
+            $secondHalfDiagonal = (($secondPlacement['size'] / 50) * $secondPlacement['scale']) / sqrt(2);
 
-            expect(hypot($firstX - $secondX, $firstY - $secondY))
-                ->toBeGreaterThanOrEqual($minimumDistance - 1e-10);
+            if (hypot($firstX - $secondX, $firstY - $secondY) < $firstHalfDiagonal + $secondHalfDiagonal) {
+                $symbolsOverlap = true;
+            }
         }
     }
+
+    expect($extendsBeyondCircle)->toBeTrue()
+        ->and($symbolsOverlap)->toBeTrue();
 })->with([3, 4, 6, 8]);
 
 test('the same seed returns a stable layout and another seed changes positions and rotations', function () {
@@ -43,6 +53,22 @@ test('the same seed returns a stable layout and another seed changes positions a
         ->and($arranger->arrange($symbolIds, 54321))->not->toEqual($firstLayout)
         ->and(count(array_filter($firstLayout, fn (array $placement): bool => $placement['rotation'] !== 0)))
         ->toBeGreaterThan(0);
+});
+
+test('default symbol scales use the Dobble configuration', function () {
+    config([
+        'dobble.symbol_scale.minimum' => 40,
+        'dobble.symbol_scale.maximum' => 200,
+        'dobble.symbol_scale.default_minimum' => 80,
+        'dobble.symbol_scale.default_maximum' => 100,
+    ]);
+
+    $placements = (new CardSymbolArranger)->arrange(range(0, 3), 12345);
+
+    foreach ($placements as $placement) {
+        expect($placement['scale'])->toBeGreaterThanOrEqual(0.8)
+            ->toBeLessThanOrEqual(1.0);
+    }
 });
 
 test('unsupported symbol counts and duplicate ids are rejected', function (array $symbolIds) {

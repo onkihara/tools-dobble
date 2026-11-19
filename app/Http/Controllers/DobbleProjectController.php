@@ -11,6 +11,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use LogicException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class DobbleProjectController extends Controller
@@ -31,11 +32,17 @@ class DobbleProjectController extends Controller
     {
         $project = $request->session()->get(self::SESSION_KEY, []);
         $savedBackgroundPath = $project['card_background']['path'] ?? null;
+        $minimumSymbolScale = (int) config('dobble.symbol_scale.minimum');
+        $maximumSymbolScale = (int) config('dobble.symbol_scale.maximum');
+        $defaultMinimumSymbolScale = (int) config('dobble.symbol_scale.default_minimum');
+        $defaultMaximumSymbolScale = (int) config('dobble.symbol_scale.default_maximum');
 
         $validated = $request->validate([
             'order' => ['required', Rule::in(DobbleSetGenerator::SUPPORTED_ORDERS)],
             'card_count' => ['required', 'integer', 'min:2', 'max:57'],
             'radius_mm' => ['required', 'integer', 'min:25', 'max:60'],
+            'symbol_size_min' => ['nullable', 'integer', 'min:'.$minimumSymbolScale, 'max:'.$maximumSymbolScale],
+            'symbol_size_max' => ['nullable', 'integer', 'min:'.$minimumSymbolScale, 'max:'.$maximumSymbolScale],
             'background_mode' => ['required', Rule::in(['color', 'image'])],
             'background_color' => ['required', 'regex:/\A#[0-9A-Fa-f]{6}\z/'],
             'background_image' => [
@@ -50,10 +57,21 @@ class DobbleProjectController extends Controller
         $order = (int) $validated['order'];
         $cardCount = (int) $validated['card_count'];
         $maximumCards = $order ** 2 + $order + 1;
+        $symbolSizeMin = isset($validated['symbol_size_min'])
+            ? (int) $validated['symbol_size_min']
+            : ($project['symbol_size_min'] ?? $defaultMinimumSymbolScale);
+        $symbolSizeMax = isset($validated['symbol_size_max'])
+            ? (int) $validated['symbol_size_max']
+            : ($project['symbol_size_max'] ?? $defaultMaximumSymbolScale);
 
         if ($cardCount > $maximumCards) {
             return back()
                 ->withErrors(['card_count' => "Bei Ordnung {$order} sind höchstens {$maximumCards} Karten möglich."])
+                ->withInput();
+        }
+        if ($symbolSizeMin > $symbolSizeMax) {
+            return back()
+                ->withErrors(['symbol_size_min' => 'Die minimale Symbolgröße darf nicht größer als die maximale Symbolgröße sein.'])
                 ->withInput();
         }
 
@@ -87,6 +105,8 @@ class DobbleProjectController extends Controller
         $project['order'] = $order;
         $project['card_count'] = $cardCount;
         $project['radius_mm'] = (int) $validated['radius_mm'];
+        $project['symbol_size_min'] = $symbolSizeMin;
+        $project['symbol_size_max'] = $symbolSizeMax;
         $project['layout_seed'] = random_int(0, 2_147_483_647);
         $project['card_background'] = [
             'mode' => $validated['background_mode'],
@@ -103,6 +123,36 @@ class DobbleProjectController extends Controller
         }
 
         return back()->with('status', 'Die Set-Konfiguration wurde aktualisiert.');
+    }
+
+    public function randomizeCard(Request $request, string $card): JsonResponse
+    {
+        $data = $this->editorData($request);
+
+        $cardId = (int) $card;
+        $cardData = collect($data['deck']['cards'])->firstWhere('id', $cardId);
+        abort_unless(is_array($cardData), 404);
+        $minimumScale = $data['layoutError'] === null
+            ? (int) $data['project']['symbol_size_min']
+            : (int) config('dobble.symbol_scale.default_minimum');
+        $maximumScale = $data['layoutError'] === null
+            ? (int) $data['project']['symbol_size_max']
+            : (int) config('dobble.symbol_scale.default_maximum');
+
+        try {
+            $placements = $this->arranger->arrange(
+                $cardData['symbols'],
+                random_int(0, 2_147_483_647),
+                $minimumScale,
+                $maximumScale,
+            );
+        } catch (LogicException) {
+            return response()->json([
+                'errors' => ['layout' => ['Für diese Karte konnte keine neue sichere Anordnung erstellt werden.']],
+            ], 422);
+        }
+
+        return response()->json(['placements' => $placements]);
     }
 
     public function uploadSymbol(Request $request, string $symbol): RedirectResponse|JsonResponse
@@ -124,7 +174,7 @@ class DobbleProjectController extends Controller
 
         $file = $validated['image'];
         if (! $file instanceof UploadedFile) {
-            throw new \LogicException('The validated symbol image is not an uploaded file.');
+            throw new LogicException('The validated symbol image is not an uploaded file.');
         }
 
         $imageSize = getimagesize($file->getPathname());
@@ -274,6 +324,10 @@ class DobbleProjectController extends Controller
     {
         $data = $this->editorData($request);
 
+        if ($data['layoutError'] !== null) {
+            return back()->withErrors(['export' => $data['layoutError']]);
+        }
+
         if ($data['missingSymbols'] !== []) {
             return back()->withErrors([
                 'export' => 'Für den Druck fehlen noch '.count($data['missingSymbols']).' Symbolbilder.',
@@ -305,22 +359,28 @@ class DobbleProjectController extends Controller
 
     /**
      * @return array{
-     *     project: array{order: int, card_count: int, radius_mm: int, layout_seed: int, symbols: array<string, array{name: string, path: string, width: int, height: int}>, card_background: array{mode: string, color: string, path: ?string}},
+     *     project: array{order: int, card_count: int, radius_mm: int, symbol_size_min: int, symbol_size_max: int, layout_seed: int, symbols: array<string, array{name: string, path: string, width: int, height: int}>, card_background: array{mode: string, color: string, path: ?string}},
      *     cardBackground: array{mode: string, color: string, imageUrl: ?string},
      *     deck: array{cards: list<array{id: int, symbols: list<int>}>, symbols: list<int>, total_cards: int, symbols_per_card: int},
      *     symbols: list<array{id: int, name: string, imageUrl: ?string, qualityWarnings: list<string>}>,
      *     symbolsById: array<int, array{id: int, name: string, imageUrl: ?string, qualityWarnings: list<string>}>,
-     *     cards: list<array{id: int, symbols: list<array{id: int, name: string, imageUrl: ?string, qualityWarnings: list<string>, placement: array{symbol_id: int, left: float, top: float, size: float, rotation: int}}>}>,
-     *     missingSymbols: list<int>
+     *     cards: list<array{id: int, symbols: list<array{id: int, name: string, imageUrl: ?string, qualityWarnings: list<string>, placement: array{symbol_id: int, left: float, top: float, size: float, rotation: int, scale: float}}>}>,
+     *     missingSymbols: list<int>,
+     *     layoutError: ?string
      * }
      */
     private function editorData(Request $request): array
     {
+        $defaultMinimumSymbolScale = (int) config('dobble.symbol_scale.default_minimum');
+        $defaultMaximumSymbolScale = (int) config('dobble.symbol_scale.default_maximum');
+
         if (! $request->session()->has(self::SESSION_KEY)) {
             $project = [
                 'order' => 3,
                 'card_count' => 13,
                 'radius_mm' => 35,
+                'symbol_size_min' => $defaultMinimumSymbolScale,
+                'symbol_size_max' => $defaultMaximumSymbolScale,
                 'layout_seed' => random_int(0, 2_147_483_647),
                 'symbols' => [],
                 'card_background' => ['mode' => 'color', 'color' => '#fffefa', 'path' => null],
@@ -330,12 +390,17 @@ class DobbleProjectController extends Controller
             $project = $request->session()->get(self::SESSION_KEY);
 
             if (! is_array($project)) {
-                throw new \LogicException('The saved Dobble project has an invalid session format.');
+                throw new LogicException('The saved Dobble project has an invalid session format.');
             }
         }
 
         if (! isset($project['layout_seed'])) {
             $project['layout_seed'] = random_int(0, 2_147_483_647);
+            $request->session()->put(self::SESSION_KEY, $project);
+        }
+        if (! isset($project['symbol_size_min'], $project['symbol_size_max'])) {
+            $project['symbol_size_min'] = $defaultMinimumSymbolScale;
+            $project['symbol_size_max'] = $defaultMaximumSymbolScale;
             $request->session()->put(self::SESSION_KEY, $project);
         }
 
@@ -397,13 +462,28 @@ class DobbleProjectController extends Controller
             }
         }
 
-        $cards = array_map(function (array $card) use ($project, $symbolsById): array {
+        $cards = [];
+        $layoutError = null;
+
+        foreach ($deck['cards'] as $card) {
             $hash = hash('sha256', $project['layout_seed'].':'.$card['id']);
             $seed = (int) hexdec(substr($hash, 0, 7));
-            $placements = $this->arranger->arrange($card['symbols'], $seed);
+
+            try {
+                $placements = $this->arranger->arrange(
+                    $card['symbols'],
+                    $seed,
+                    (int) $project['symbol_size_min'],
+                    (int) $project['symbol_size_max'],
+                );
+            } catch (LogicException) {
+                $layoutError = 'Die Symbole lassen sich mit diesen Größenlimits nicht sicher anordnen. Die Vorschau verwendet ersatzweise die Standardgrößen; passe die Grenzen an, damit der Druck freigegeben wird.';
+                $placements = $this->arranger->arrange($card['symbols'], $seed);
+            }
+
             $placementsBySymbol = array_column($placements, null, 'symbol_id');
 
-            return [
+            $cards[] = [
                 'id' => $card['id'],
                 'symbols' => array_map(
                     fn (int $symbolId): array => [
@@ -413,9 +493,9 @@ class DobbleProjectController extends Controller
                     $card['symbols'],
                 ),
             ];
-        }, $deck['cards']);
+        }
 
-        return compact('project', 'cardBackground', 'deck', 'symbols', 'symbolsById', 'cards', 'missingSymbols');
+        return compact('project', 'cardBackground', 'deck', 'symbols', 'symbolsById', 'cards', 'missingSymbols', 'layoutError');
     }
 
     /**
